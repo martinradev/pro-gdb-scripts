@@ -1,5 +1,6 @@
 import gdb
 import argparse
+import sys
 from enum import Enum
 
 class Mode(Enum):
@@ -8,11 +9,26 @@ class Mode(Enum):
     NONE = 2
 
 class step_until_func(gdb.Command):
-    def __init__(self):
-        super(step_until_func, self).__init__("step_until_func", gdb.COMMAND_DATA)
+    """
+        Step-in until gdb sees call/jmp
 
-    def write(self, str):
-        self.file.write(str + "\n")
+        -c, --call    until call a register
+        -j, --jump    until a jmp
+        -n, --number  max number of instructions
+        -o, --output  save results to a file
+
+        Example:
+        step_until -c -j
+    """
+
+    def __init__(self):
+        super(step_until_func, self).__init__("step_until", gdb.COMMAND_DATA)
+        parser = argparse.ArgumentParser()
+        parser.add_argument("-c", "--call", action="store_true")
+        parser.add_argument("-j", "--jump", action="store_true")
+        parser.add_argument("-o", "--output", nargs=1)
+        parser.add_argument("-n", "--number", nargs=1)
+        self.parser = parser
 
     def find_register_in_trail_and_print_info(self, trail, reg):
         self.write("Possible occurrences:")
@@ -21,54 +37,54 @@ class step_until_func(gdb.Command):
             if reg in disassembly:
                 self.write(disassembly)
 
-    def finalize(self):
-        self.file.close()
+    def handle_single(self, calls, jumps, limit):
+        gdb.execute("si")
+        res = gdb.execute("x /i $rip", to_string = True)
+        instruction = res.split(":")[1]
+        if (calls and "call" in instruction) or (jumps and "jmp" in instruction):
+            registers = ["rax", "rbx", "rcx", "rdx", "rsp", "rdi", "rsi", "rbp"]
+            for u in range(8, 16):
+                registers.append("r" + str(u))
+            for reg in registers:
+                if reg in res:
+                    print(res)
+                    gdb.execute("x /30i $rip - 0x30")
+                    gdb.execute("info registers")
+                    return True
+        return False
+
+    def handle(self, calls, jumps, limit):
+        for u in range(limit):
+            if self.handle_single(calls, jumps, limit):
+                break
 
     def invoke(self, arg, from_tty):
-        args = arg.split(" ")
-        mode = Mode.NONE
-        if len(args) == 2:
-            if args[0] != "single":
-                print("error: invalid arg")
-                return
-            mode = Mode.SINGLE
-        elif len(args) == 3:
-            if args[0] != "record":
-                print("Error: record output_file size")
-                return
-            mode = Mode.RECORD
-        else:
-            print("error")
-            return
-        n = int(args[1])
-        max_instruction_trail_size = 32
-        instruction_trail = []
-        self.file = open(args[0], "w")
-        if self.file == None:
-            print("failed to open file", args[0])
-            return
+        args = None
         try:
-            for u in range(n):
-                res = gdb.execute("x /i $rip", to_string = True)
-                instruction = res.split(":")[1]
-                if "call" in instruction:
-                    registers = ["rax", "rbx", "rcx", "rdx", "rsp", "rdi", "rsi", "rbp"]
-                    for u in range(8, 16):
-                        registers.append("r" + str(u))
-                    for reg in registers:
-                        if reg in instruction:
-                            self.write(res)
-                            self.find_register_in_trail_and_print_info(instruction_trail, reg)
-                            if mode == Mode.SINGLE:
-                                return
-                if len(instruction_trail) >= max_instruction_trail_size:
-                    instruction_trail.pop(0)
-                rip = int(gdb.parse_and_eval("$rip").cast(gdb.lookup_type("unsigned long")))
-                instruction_trail.append((rip, res))
-                gdb.execute("si")
+            args = self.parser.parse_args(arg.split(" "))
+        except:
+            print("Failed to parse arguments")
+            return None
+
+        if not args.jump and not args.call:
+            print("Need to request jump and/or call")
+            return None
+
+        trace_calls = args.call
+        trace_jump = args.jump
+        limit = int(args.number) if args.number else 1024 * 1024 * 1024 * 1024
+
+        saved_stdout = sys.stdout
+        output_file = args.output[0] if args.output else None
+        if output_file:
+            sys.stdout = open(output_file, "w+")
+
+        try:
+            self.handle(trace_calls, trace_jump, limit)
         except Exception as e:
-            print(e)
-            pass
-        self.finalize()
+            print(f"Failed to handle command: {e}")
+        finally:
+            sys.stdout = saved_stdout
+        return
 
 step_until_func()
