@@ -1,6 +1,15 @@
 import gdb
 
 class Write_N_Bytes(gdb.Command):
+    """
+        write_n_bytes QEMU_VA LEN BYTE
+
+        Writes LEN * BYTE at QEMU_VA
+        BYTE needs to be in hex
+
+        Example:
+        write_n_bytes 0x7ffff0000 0x1000 0x41
+    """
     def __init__(self):
         super(Write_N_Bytes, self).__init__("write_n_bytes", gdb.COMMAND_DATA)
 
@@ -19,6 +28,17 @@ class Write_N_Bytes(gdb.Command):
         th.write_memory(addr, by)
 
 class Write_Inf(gdb.Command):
+    """
+        write_inf QEMU_VA LEN
+
+        Writes an instruction sequence of infinite loops to 'trap' code.
+        The written sequence is EB FE
+
+        The LEN is number of bytes, not the number of infinite loop sequences.
+
+        Example:
+        write_inf 0x7ffff0000 0x1000
+    """
     def __init__(self):
         super(Write_Inf, self).__init__("write_inf", gdb.COMMAND_DATA)
 
@@ -35,6 +55,16 @@ class Write_Inf(gdb.Command):
         th.write_memory(addr, by)
 
 class Write_Ud(gdb.Command):
+    """
+        write_ud QEMU_VA LEN
+
+        Writes an instruction sequence of UD instructions.
+
+        The LEN is number of bytes, not the number of UD instructions.
+
+        Example:
+        write_ud 0x7ffff0000 0x1000
+    """
     def __init__(self):
         super(Write_Ud, self).__init__("write_ud", gdb.COMMAND_DATA)
 
@@ -54,6 +84,14 @@ class Write_Ud(gdb.Command):
 
 
 class Write_String(gdb.Command):
+    """
+        write_string QEMU_VA STRING
+
+        Write STRING at QEMU_VA
+
+        Example:
+        write_ud 0x7ffff0000 hello world
+    """
     def __init__(self):
         super(Write_String, self).__init__("write_string", gdb.COMMAND_DATA)
 
