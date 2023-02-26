@@ -36,13 +36,35 @@ class Find_Sim_Ptr(gdb.Command):
     search = int(tok[2], 16)
     
     th = gdb.inferiors()[0]
-    mem = th.read_memory(search1, search2-search1)
+    mem = th.read_memory(ptr1, ptr2-ptr1)
     for u in range(len(mem) - 8):
         tmp = int.from_bytes(mem[u: u + 8], 'little')
         delta = search ^ tmp
         if (delta & ~0xFFFF) == 0:
-            print(f"Found {hex(tmp)} at addr {hex(search1 + u)}")
+            print(f"Found {hex(tmp)} at addr {hex(ptr1 + u)}")
 
+class Find_Func_Ptr(gdb.Command):
+  def __init__(self):
+    super(Find_Func_Ptr, self).__init__("find_func_ptr", gdb.COMMAND_DATA)
+
+  def invoke(self, arg, from_tty):
+    tok = arg.split(" ")
+    if len(tok) != 2:
+        print("Example usage: find_func_ptr PTR_RANGE_A PTR_RANGE_B")
+        return None
+    ptr1 = int(tok[0], 16)
+    ptr2 = int(tok[1], 16)
+    th = gdb.inferiors()[0]
+    mem = th.read_memory(ptr1, ptr2-ptr1)
+    off = 0xd00000000
+    for u in range(0, len(mem), 8):
+        tmp = int.from_bytes(mem[u: u + 8], 'little')
+        if tmp != 0:
+            cmd = f"vmmap {hex(tmp)}"
+            res = gdb.execute(cmd, to_string=True)
+            if "r-xp" in res:
+                print(hex(ptr1 + u), ":", cmd, res)
+                #th.write_memory(ptr1 + u, (off + u * 0x1000).to_bytes(8, 'little'))
 
 class Find_Data(gdb.Command):
     def __init__(self, sz):
@@ -76,6 +98,7 @@ class Find_Data(gdb.Command):
                 i = i + 1
 
 Find_Ptr()
+Find_Func_Ptr()
 Find_Sim_Ptr()
 for u in range(1, 9):
     Find_Data(u)
